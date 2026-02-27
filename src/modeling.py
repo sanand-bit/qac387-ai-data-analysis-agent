@@ -21,10 +21,14 @@ def multiple_linear_regression(
     """
     if outcome not in df.columns:
         raise ValueError(f"Outcome column '{outcome}' not found in dataframe.")
-
+    if not pd.api.types.is_numeric_dtype(df[outcome]):
+        raise ValueError(f"Outcome column '{outcome}' must be numeric.")
     if predictors is None:
-        predictors = [c for c in df.columns if c != outcome]
-
+        predictors = (
+            df.select_dtypes(include=["number"])
+            .columns.drop(outcome)
+            .tolist()
+        )
     missing_preds = [p for p in predictors if p not in df.columns]
     if missing_preds:
         raise ValueError(f"Predictor(s) not found: {missing_preds}")

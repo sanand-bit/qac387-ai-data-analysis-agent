@@ -92,26 +92,21 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from src import ensure_dirs, read_data, basic_profile
 
 
-# -------------------------------------------------------------------------------------------------
-# TODO: Write your own SYSTEM PROMPT
-# -------------------------------------------------------------------------------------------------
-# Instructions:
-# 1) Replace the text in SYSTEM_PROMPT with your own system prompt.
-# 2) Your prompt MUST:
-#    - Define the assistant's role (e.g., "You are a data analysis assistant for students.")
-#    - State that the assistant ONLY sees the dataset schema (columns + dtypes)
-#    - Instruct the model NOT to invent columns that are not in the schema
-#    - Specify the output format (research questions + variables + analysis + clarifying questions)
-#
-# Tip: Keep it short and explicit. You can iterate after testing.
-SYSTEM_PROMPT = """
-TODO: Replace this with your own system prompt.
 
-Required elements:
-- Role
-- Only sees schema
-- No hallucinated columns
-- Output format instructions
+SYSTEM_PROMPT = """You are a helpful data assistant for students.
+
+You ONLY have access to the dataset schema text provided to you (rows, columns, and dtypes).
+You do NOT have access to raw dataset values, and you must NOT guess.
+
+Rules:
+- Do not invent columns that are not listed in the schema.
+- If the question cannot be answered from the schema alone, explain what is known and ask a clarifying question.
+
+Response format:
+1) Answer (brief and direct)
+2) Relevant variables (bullet list using ONLY column names from the schema)
+3) Suggested next step or clarifying question
+
 """
 
 
@@ -136,7 +131,7 @@ def profile_to_schema_text(profile: dict) -> str:
         "",
         "Columns and dtypes:",
     ]
-    for col in profile["_____"]:
+    for col in profile["columns"]:
         lines.append(f"- {col}: {profile['dtypes'].get(col)}")
 
     return "\n".join(lines)
@@ -159,14 +154,14 @@ def build_chain(
     if memory:
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", _________),
+                ("system", SYSTEM_PROMPT),
                 ("human", "Dataset schema:\n{schema_text}"),
                 MessagesPlaceholder(variable_name="history"),
                 ("human", "User question:\n{user_query}"),
             ]
         )
 
-        base_chain = prompt | ______ | StrOutputParser()
+        base_chain = prompt | llm | StrOutputParser()
 
         history = InMemoryChatMessageHistory()
         chain_with_history = RunnableWithMessageHistory(
@@ -244,28 +239,28 @@ def main():
     )
 
     parser.add_argument(
-        "_____",
-        type=_____,
-        required=_____,
+        "--data",
+        type=str,
+        required=True,
         help="Path to CSV file",
     )
-    parser.add_argument("--report_dir", type=str, default="_____")
-    parser.add_argument("--model", type=str, default="_____")
-    parser.add_argument("--temperature", type=float, default=_____)
+    parser.add_argument("--report_dir", type=str, default="reports")
+    parser.add_argument("--model", type=str, default="gpt-4o-mini")
+    parser.add_argument("--temperature", type=float, default=0.2)
 
     parser.add_argument(
         "--quiet_schema",
-        action="_____",
+        action="store_true",
         help="Do not print schema automatically at startup",
     )
     parser.add_argument(
         "--memory",
-        action="_____",
+        action="store_true",
         help="Enable conversation memory for this session",
     )
     parser.add_argument(
         "--stream",
-        action="_____",
+        action="store_true",
         help="Stream model output to terminal as it is generated",
     )
 
@@ -291,7 +286,7 @@ def main():
         model=args.model,
         temperature=args.temperature,
         stream=args.stream,
-        memory=args.________,
+        memory=args.memory,
     )
 
     while True:
