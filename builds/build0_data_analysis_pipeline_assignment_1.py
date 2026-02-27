@@ -35,6 +35,7 @@ B) multiple_linear_regression(df, outcome, predictors=None)
 
 HOW TO RUN (example): You can copy and paste this command (all one line) in your terminal after
 replacing Target_Column, Outcome_Column, Predictor1, Predictor2 with actual column names from your dataset:
+python3 /Users/saisha/Documents/Untitled/builds/build0_data_analysis_pipeline_assignment_1.py --data /Users/saisha/Documents/Untitled/data/penguins.csv --target body_mass_g --outcome body_mass_g --predictors flipper_length_mm,bill_depth_mm --report_dir reports/
 python3 /Users/saisha/Documents/GitHub/qac387-ai-data-analysis-agent/builds/build0_data_analysis_pipeline_assignment_1.py --data /Users/saisha/Documents/GitHub/qac387-ai-data-analysis-agent/data/penguins.csv --target body_mass_g --outcome body_mass_g --predictors flipper_length_mm,bill_depth_mm --report_dir reports/
 
 
@@ -82,8 +83,11 @@ def read_data(path: Path) -> pd.DataFrame:
     # BLANK 2: raise FileNotFoundError if path does not exist
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
 
     # BLANK 3: read the CSV into df
+    df = pd.read_csv(path)
     df = pd.read_csv(path)
 
     if df.empty:
@@ -103,6 +107,7 @@ def basic_profile(df: pd.DataFrame) -> dict:
         "n_cols": int(df.shape[1]),
         # BLANK 4: list of column names
         "columns": [str(c) for c in df.columns],
+        "columns": [str(c) for c in df.columns],
         "dtypes": {c: str(df[c].dtype) for c in df.columns},
         "n_missing_total": int(df.isna().sum().sum()),
         "missing_by_col": df.isna().sum().to_dict(),
@@ -114,6 +119,8 @@ def split_columns(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
     """Identify and split numeric vs categorical columns into numeric and categorical lists."""
     # BLANK 5: list numeric column names
     # HINT: df.select_dtypes(include=["number"]).columns.______
+    numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+
     numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
 
 
@@ -147,6 +154,7 @@ def summarize_numeric(df: pd.DataFrame, numeric_cols: List[str]) -> pd.DataFrame
     # BLANK 6: Create a transposed describe table with percentiles 0.25, 0.5, 0.75
     # HINT: df[numeric_cols].describe(...).T
     summary = df[numeric_cols].describe(percentiles=[0.25, 0.5,0.75]).T
+    summary = df[numeric_cols].describe(percentiles=[0.25, 0.5,0.75]).T
 
     summary = summary.rename(columns={"50%": "median", "25%": "p25", "75%": "p75"})
     summary.insert(0, "column", summary.index)
@@ -166,6 +174,8 @@ def summarize_categorical(
         n_unique = int(series.nunique(dropna=True))
 
         # BLANK 7: top_k value counts (drop missing)
+        top = series.dropna().value_counts().head(top_k)
+
         top = series.dropna().value_counts().head(top_k)
 
 
@@ -201,6 +211,18 @@ def missingness_table(df: pd.DataFrame) -> pd.DataFrame:
     - df.isna().mean() gives missing rates
     - df.isna().sum() gives missing counts
     """
+
+    missing_rate = df.isna().mean()
+    missing_count = df.isna().sum()
+
+    missing_df = pd.DataFrame({
+        "column": [str(c) for c in df.columns],
+        "missing_rate": [float(missing_rate[c]) for c in df.columns],
+        "missing_count": [int(missing_count[c]) for c in df.columns],
+    }).sort_values(by="missing_rate", ascending=False, kind="mergesort")
+
+    missing_df.reset_index(drop=True, inplace=True)
+    return missing_df
 
     missing_rate = df.isna().mean()
     missing_count = df.isna().sum()
@@ -301,6 +323,66 @@ def multiple_linear_regression(
         "intercept": intercept,
     }
 
+    # ANSWER 
+    import statsmodels.api as sm
+
+    if outcome not in df.columns:
+        raise ValueError(f"Outcome column '{outcome}' not found.")
+
+    if not pd.api.types.is_numeric_dtype(df[outcome]):
+        raise ValueError(f"Outcome column '{outcome}' must be numeric.")
+
+    # Use all numeric predictors if none provided
+    if predictors is None:
+        predictors = (
+            df.select_dtypes(include=["number"])
+            .columns.drop(outcome)
+            .tolist()
+        )
+
+    if not predictors:
+        raise ValueError("No predictors available.")
+
+    # Check predictors exist
+    missing_preds = [p for p in predictors if p not in df.columns]
+    if missing_preds:
+        raise ValueError(f"Predictors not found: {missing_preds}")
+
+    # Drop missing rows
+    used_df = df[[outcome] + predictors].dropna()
+
+    n_rows_used = int(used_df.shape[0])
+
+    if n_rows_used == 0:
+        raise ValueError("No rows left after dropping missing values.")
+
+    y = used_df[outcome]
+    X = used_df[predictors]
+
+    X = sm.add_constant(X)
+
+    model = sm.OLS(y, X).fit()
+
+    params = model.params.to_dict()
+
+    intercept = float(params.get("const", 0.0))
+
+    coefficients = {
+        str(k): float(v)
+        for k, v in params.items()
+        if k != "const"
+    }
+
+    return {
+        "outcome": str(outcome),
+        "predictors": [str(p) for p in predictors],
+        "n_rows_used": n_rows_used,
+        "r_squared": float(model.rsquared),
+        "adj_r_squared": float(model.rsquared_adj),
+        "coefficients": coefficients,
+        "intercept": intercept,
+    }
+
 
 
 def correlations(df: pd.DataFrame, numeric_cols: List[str]) -> pd.DataFrame:
@@ -308,6 +390,7 @@ def correlations(df: pd.DataFrame, numeric_cols: List[str]) -> pd.DataFrame:
     if len(numeric_cols) < 2:
         return pd.DataFrame()
     # BLANK 8: compute correlation matrix for numeric columns
+    corr = df[numeric_cols].corr()
     corr = df[numeric_cols].corr()
     return corr
 
@@ -322,6 +405,7 @@ def plot_missingness(miss_df: pd.DataFrame, out_path: Path, top_n: int = 30) -> 
     plot_df = miss_df.head(top_n).iloc[::-1]
     plt.figure()
     # BLANK 9: create a horizontal bar chart using column names and missing_rate
+    plt.barh(plot_df["column"], plot_df["missing_rate"])
     plt.barh(plot_df["column"], plot_df["missing_rate"])
     plt.xlabel("Missing rate")
     plt.title(f"Top {min(top_n, len(miss_df))} columns by missingness")
@@ -551,6 +635,7 @@ def main():
         if args.predictors:
             # BLANK 10: parse comma-separated predictors into a list of cleaned names
             # HINT: [p.strip() for p in args.predictors.split(",") if p.strip()]
+            preds = [p.strip() for p in args.predictors.split(",") if p.strip()]
             preds = [p.strip() for p in args.predictors.split(",") if p.strip()]
 
         # Run the regression
